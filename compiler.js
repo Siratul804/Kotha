@@ -109,7 +109,7 @@ const code = `
 bolo x = 100
 bolo y = 20
 
-bolo sum = x - y
+bolo sum = x + y
 
 koro sum
 `;
