@@ -1,3 +1,5 @@
+const fs = require("fs");
+
 function lexer(input) {
   const tokens = [];
   let cursor = 0;
@@ -16,7 +18,7 @@ function lexer(input) {
         word += char;
         char = input[++cursor];
       }
-      if (word === "bolo" || word === "koro") {
+      if (["bolo", "koro", "jodi", "naile"].includes(word)) {
         tokens.push({ type: "keyword", value: word });
       } else {
         tokens.push({ type: "identifier", value: word });
@@ -31,12 +33,17 @@ function lexer(input) {
         char = input[++cursor];
       }
       tokens.push({ type: "number", value: parseInt(num) });
-
       continue;
     }
 
-    if (/[\+\-\*\/=]/.test(char)) {
+    if (/[\+\-\*\/=<>]/.test(char)) {
       tokens.push({ type: "operator", value: char });
+      cursor++;
+      continue;
+    }
+
+    if (/[{}]/.test(char)) {
+      tokens.push({ type: "brace", value: char });
       cursor++;
       continue;
     }
@@ -50,6 +57,7 @@ function parser(tokens) {
     type: "Program",
     body: [],
   };
+
   while (tokens.length > 0) {
     let token = tokens.shift();
 
@@ -61,13 +69,16 @@ function parser(tokens) {
       };
       if (tokens[0].type === "operator" && tokens[0].value === "=") {
         tokens.shift();
-        let expression = "";
-        while (tokens.length > 0 && tokens[0].type !== "keyword") {
-          expression += tokens.shift().value;
+        let expression = [];
+        while (
+          tokens.length > 0 &&
+          tokens[0].type !== "keyword" &&
+          tokens[0].type !== "brace"
+        ) {
+          expression.push(tokens.shift());
         }
-        declaration.value = expression.trim();
+        declaration.value = expression;
       }
-
       ast.body.push(declaration);
     }
 
@@ -76,6 +87,41 @@ function parser(tokens) {
         type: "Print",
         expression: tokens.shift().value,
       });
+    }
+
+    // Handle 'jodi' (if) and 'naile' (else)
+    if (token.type === "keyword" && token.value === "jodi") {
+      let condition = [];
+      while (tokens.length > 0 && tokens[0].type !== "brace") {
+        condition.push(tokens.shift());
+      }
+
+      tokens.shift(); // Skip the '{'
+      let body = [];
+      while (tokens.length > 0 && tokens[0].value !== "}") {
+        body.push(tokens.shift());
+      }
+      tokens.shift(); // Skip the '}'
+
+      let ifStatement = {
+        type: "IfStatement",
+        condition,
+        body: parser(body), // Parse the block recursively
+        elseBody: null,
+      };
+
+      if (tokens.length > 0 && tokens[0].value === "naile") {
+        tokens.shift(); // Skip 'naile'
+        tokens.shift(); // Skip the '{'
+        let elseBody = [];
+        while (tokens.length > 0 && tokens[0].value !== "}") {
+          elseBody.push(tokens.shift());
+        }
+        tokens.shift(); // Skip the '}'
+        ifStatement.elseBody = parser(elseBody); // Parse else block recursively
+      }
+
+      ast.body.push(ifStatement);
     }
   }
 
@@ -86,34 +132,53 @@ function codeGen(node) {
   switch (node.type) {
     case "Program":
       return node.body.map(codeGen).join("\n");
+
     case "Declaration":
-      return `const ${node.name} = ${node.value};`;
+      return `const ${node.name} = ${codeGenExpression(node.value)};`;
+
     case "Print":
       return `console.log(${node.expression});`;
+
+    case "IfStatement":
+      const condition = codeGenExpression(node.condition);
+      const ifBody = node.body.body.map(codeGen).join("\n");
+      const elseBody = node.elseBody
+        ? `else {\n${node.elseBody.body.map(codeGen).join("\n")}\n}`
+        : "";
+      return `if (${condition}) {\n${ifBody}\n} ${elseBody}`;
   }
+}
+
+function codeGenExpression(tokens) {
+  return tokens
+    .map((token) => {
+      if (token.type === "identifier" || token.type === "number") {
+        return token.value;
+      } else if (token.type === "operator") {
+        return token.value;
+      }
+    })
+    .join(" ");
 }
 
 function compiler(input) {
   const tokens = lexer(input);
   const ast = parser(tokens);
   const executableCode = codeGen(ast);
-  //   console.log(executableCode);
   return executableCode;
 }
 
-function runner(input) {
-  eval(input);
+function runner(filePath) {
+  fs.readFile(filePath, "utf8", (err, data) => {
+    if (err) {
+      console.error("Error reading the file:", err);
+      return;
+    }
+
+    const compiledCode = compiler(data);
+    // console.log("Generated Code: \n", compiledCode);
+    eval(compiledCode); // Execute the compiled code
+  });
 }
 
-const code = `
-bolo x = 100
-bolo y = 20
-
-bolo sum = x + y
-
-koro sum
-`;
-
-const exec = compiler(code);
-
-runner(exec);
+runner("code.kotha");

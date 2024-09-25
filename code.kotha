@@ -1,0 +1,12 @@
+bolo x = 100
+bolo y = 200
+
+bolo sum = x + y
+
+koro sum
+
+jodi x > y {
+  koro x
+} naile {
+  koro y
+}
